@@ -1,14 +1,14 @@
 # Streaming a lesson conversation into an edtech page
 
-I needed a course page that streams an answer token by token and tags it with a deadline status for the educator. Shipped in an afternoon. Easy for the next dev to read, which matters when you're solo.
+I run a one-person SaaS, so every feature fights for revenue per hour. This edtech slice shows token streaming to the learner and a deadline status to the educator. Shipped in an afternoon, easy for the next dev to read.
 
-Infrai is the model backend here through its OpenAI-compatible `base_url`; one `INFRAI_API_KEY` is enough for this call. I left the deadline logic in Python and let the OpenAI client manage the stream.
+Infrai backs the model via its OpenAI-compatible `base_url`; one `INFRAI_API_KEY` covers this call. I keep app logic in Python, let the OpenAI client do the stream. Outsource the undifferentiated plumbing.
 
 ## The decision I shipped
 
-Request shape mirrors the UI: `lesson_id`, `learner_name`, `question`, and a `deadline`. `deadline_decision` turns that date into `upcoming`, `due_today`, or `overdue`. Final SSE event carries the status so the teacher panel updates without a second request.
+Request shape mirrors the UI: `lesson_id`, `learner_name`, `question`, and a `deadline`. `deadline_decision` maps the date to `upcoming`, `due_today`, or `overdue`. Last SSE event ships the status, educator panel updates with no extra round trip.
 
-I weighed three paths. Blocking response is simplest but leaves the learner waiting cold. Polling adds state and another endpoint. Streaming wins on this page: first token is useful now, final report event gives educators a stable boundary. Trade-off is the browser must consume SSE and handle the `[DONE]` marker.
+I weighed a full response, polling, and streaming. Full response is easy but learner stares at a spinner. Polling means more state, another endpoint. Streaming fits: first token lands fast, final event gives educator a clean boundary. Cost is browser SSE plus the `[DONE]` marker.
 
 ## Run the slice
 
@@ -28,11 +28,11 @@ curl -N -X POST http://127.0.0.1:8000/lessons/stream \
   -d '{"lesson_id":"fractions-01","learner_name":"Mina","question":"Why do equal denominators matter?","deadline":"2026-09-30"}'
 ```
 
-You will see `token` events followed by a `report` event such as `{"status":"upcoming"}`. The model call is `chat.completions.create(..., stream=True)` with `model="auto"`, and the key is read from the environment.
+Expect `token` events then a `report` event like `{"status":"upcoming"}`. Call is `chat.completions.create(..., stream=True)` using `model="auto"`; key pulled from env. Weekly ship, no drama.
 
 ## Check the business rule
 
-The focused test freezes the calendar, proves an overdue lesson is classified as `overdue`, and checks that the same decision reaches the educator report:
+Test pins the clock, asserts overdue maps to `overdue`, and confirms the educator report gets same decision:
 
 ```bash
 pytest -q tests/test_lesson_stream.py
@@ -40,7 +40,7 @@ pytest -q tests/test_lesson_stream.py
 
 ## Files that matter
 
-`src/lesson_stream.py` contains the typed request, deadline decision, report, SSE route, and model stream. `tests/test_lesson_stream.py` covers the domain choice rather than merely checking that a function exists. There is no separate worker or persistence layer because this example stops at the observable page workflow.
+`src/lesson_stream.py` holds the typed request, deadline logic, report, SSE route, model stream. `tests/test_lesson_stream.py` tests the domain rule, not just function existence. No worker or DB; we stop at the page workflow. Keep it lean.
 
 ## License
 
@@ -48,7 +48,7 @@ MIT
 
 ## Wiring it up for real: Streaming Edtech Lesson Service
 
-The example above is intentionally minimal. A few things to wire up for real use: The details below apply to Streaming Edtech Lesson Service.
+Above is minimal by design. For production, wire these up. Details pertain to Streaming Edtech Lesson Service.
 
 **Account & key**
 
